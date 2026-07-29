@@ -1,3 +1,4 @@
+import json
 import os
 from pydantic_settings import BaseSettings
 from dotenv import load_dotenv
@@ -8,7 +9,7 @@ load_dotenv()
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    APP_NAME: str = "AI Assistant API"
+    APP_NAME: str = "NovaAI"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = os.getenv("DEBUG", "False").lower() == "true"
 
@@ -18,7 +19,7 @@ class Settings(BaseSettings):
     GROQ_TEMPERATURE: float = float(os.getenv("GROQ_TEMPERATURE", "0.7"))
     GROQ_MAX_TOKENS: int = int(os.getenv("GROQ_MAX_TOKENS", "1024"))
 
-    # Database (SQLite — swap to postgresql+asyncpg when PostgreSQL is ready)
+    # Database
     DATABASE_URL: str = os.getenv(
         "DATABASE_URL",
         "sqlite+aiosqlite:///./ai_assistant.db",
@@ -26,16 +27,12 @@ class Settings(BaseSettings):
 
     # JWT
     JWT_SECRET_KEY: str = os.getenv("JWT_SECRET_KEY", "change-me-in-production")
-    JWT_ALGORITHM: str = "HS256"
+    JWT_ALGORITHM: str = os.getenv("JWT_ALGORITHM", "HS256")
     ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
     REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
 
     # CORS
-    CORS_ORIGINS: list = [
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:5173",
-    ]
+    CORS_ORIGINS: list = json.loads(os.getenv("CORS_ORIGINS", '["http://localhost:5173","http://localhost:3000"]'))
 
     # Redis Configuration
     REDIS_URL: str = os.getenv("REDIS_URL", "redis://localhost:6379/0")
@@ -55,14 +52,14 @@ class Settings(BaseSettings):
     MEMORY_MAX_RESULTS: int = int(os.getenv("MEMORY_MAX_RESULTS", "10"))
     MEMORY_IMPORTANCE_THRESHOLD: float = float(os.getenv("MEMORY_IMPORTANCE_THRESHOLD", "0.7"))
 
-    # Voice Configuration - STT (Speech to Text)
+    # Voice Configuration - STT
     WHISPER_MODEL: str = os.getenv("WHISPER_MODEL", "tiny")
     WHISPER_DEVICE: str = os.getenv("WHISPER_DEVICE", "cpu")
     WHISPER_COMPUTE_TYPE: str = os.getenv("WHISPER_COMPUTE_TYPE", "int8")
     WHISPER_LANGUAGE: str = os.getenv("WHISPER_LANGUAGE", "en")
     WHISPER_beam_size: int = int(os.getenv("WHISPER_BEAM_SIZE", "5"))
 
-    # Voice Configuration - TTS (Text to Speech)
+    # Voice Configuration - TTS
     TTS_VOICE: str = os.getenv("TTS_VOICE", "en-US-GuyNeural")
     TTS_RATE: str = os.getenv("TTS_RATE", "+0%")
     TTS_VOLUME: str = os.getenv("TTS_VOLUME", "+0%")
@@ -79,6 +76,21 @@ class Settings(BaseSettings):
     RAG_MAX_FILE_SIZE_MB: int = int(os.getenv("RAG_MAX_FILE_SIZE_MB", "20"))
     RAG_DEFAULT_RESULTS: int = int(os.getenv("RAG_DEFAULT_RESULTS", "5"))
     RAG_COLLECTION: str = os.getenv("RAG_COLLECTION", "documents")
+
+    # Vision Configuration
+    VISION_ENABLED: bool = os.getenv("VISION_ENABLED", "true").lower() == "true"
+    VISION_MAX_FILE_SIZE_MB: int = int(os.getenv("VISION_MAX_FILE_SIZE_MB", "20"))
+    VISION_UPLOAD_DIR: str = os.getenv("VISION_UPLOAD_DIR", "uploads/vision")
+
+    # MCP Configuration
+    MCP_SERVERS: list = json.loads(os.getenv("MCP_SERVERS", "[]"))
+    MCP_AUTO_CONNECT: bool = os.getenv("MCP_AUTO_CONNECT", "true").lower() == "true"
+
+    # Security & Rate Limiting
+    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "60"))
+    RATE_LIMIT_WINDOW_SECONDS: int = int(os.getenv("RATE_LIMIT_WINDOW_SECONDS", "60"))
+    ALLOWED_HOSTS: list = json.loads(os.getenv("ALLOWED_HOSTS", '["*"]'))
+    MAX_REQUEST_SIZE_MB: int = int(os.getenv("MAX_REQUEST_SIZE_MB", "50"))
 
     class Config:
         env_file = ".env"

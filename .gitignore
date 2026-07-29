@@ -1,10 +1,46 @@
+# Dependencies
 node_modules/
 __pycache__/
 *.pyc
+*.pyo
+*.egg-info/
+
+# Environment
 .env
+.env.local
+.env.production
+
+# Build
 dist/
 build/
-.venv/
-venv/
-*.egg-info/
+*.egg
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data (local development)
+*.db
+chroma_db/
+data/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Vite
 .vite/
+
+# Docker
+docker-compose.override.yml
+
+# Temporary
+tmp/
+temp/
+tmp_*/

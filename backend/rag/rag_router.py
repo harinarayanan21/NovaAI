@@ -112,12 +112,18 @@ async def query_documents(
     current_user: User = Depends(get_current_user),
 ):
     """Ask a question about uploaded documents. Uses RAG to find relevant chunks and generate an answer."""
-    result = await rag_manager.query(
-        user_id=current_user.id,
-        question=request.question,
-        n_results=request.n_results,
-    )
-    return RAGQueryResponse(**result)
+    try:
+        result = await rag_manager.query(
+            user_id=current_user.id,
+            question=request.question,
+            n_results=request.n_results,
+        )
+        return RAGQueryResponse(**result)
+    except Exception as e:
+        error_msg = str(e)
+        if "429" in error_msg or "rate" in error_msg.lower():
+            raise HTTPException(status_code=429, detail="Service is experiencing high demand. Please try again shortly.")
+        raise HTTPException(status_code=500, detail="Failed to process query.")
 
 
 @router.get("/stats", response_model=RAGStatsResponse)

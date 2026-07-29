@@ -1,0 +1,51 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    env:
+      GROQ_API_KEY: "test-key"
+      REDIS_USE_FAKE: "true"
+      DATABASE_URL: "sqlite+aiosqlite:///./test.db"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint with ruff
+        run: |
+          cd backend
+          ruff check . --select E,F,W --ignore E501,E401,E302,E303,W291,W292,W293,W391
+
+      - name: Verify imports
+        run: |
+          cd backend
+          python -c "from backend.config.settings import settings; print('Settings OK')"
+          python -c "from backend.auth.jwt import create_access_token, decode_token; print('JWT OK')"
+          python -c "from backend.tools.tool_manager import tool_manager; print('Tools OK:', tool_manager.list_tools())"
+
+      - name: Verify app loads
+        run: |
+          cd backend
+          python -c "
+          import sys; sys.path.insert(0, '..')
+          from backend.main import app
+          print('FastAPI app loaded:', app.title)
+          "

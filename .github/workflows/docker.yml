@@ -1,0 +1,39 @@
+name: Docker Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: |
+          docker build -f backend/Dockerfile -t novaai-backend:latest backend/
+
+      - name: Test backend image
+        run: |
+          docker run -d --name test-backend \
+            -e GROQ_API_KEY=test \
+            -e REDIS_USE_FAKE=true \
+            -e DATABASE_URL=sqlite+aiosqlite:///./data/ai_assistant.db \
+            -p 8000:8000 \
+            novaai-backend:latest
+          sleep 5
+          curl -sf http://localhost:8000/health | head -c 200
+          docker stop test-backend && docker rm test-backend
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build frontend image
+        run: |
+          docker build -f frontend/Dockerfile -t novaai-frontend:latest frontend/

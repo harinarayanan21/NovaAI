@@ -1,0 +1,11 @@
+node_modules
+__pycache__
+.git
+.env
+*.db
+dist
+build
+.venv
+chroma_db
+*.log
+test_*

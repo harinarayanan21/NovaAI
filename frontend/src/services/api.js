@@ -1,7 +1,9 @@
 import axios from "axios";
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "/api";
+
 const api = axios.create({
-  baseURL: "/api",
+  baseURL: API_BASE_URL,
   headers: { "Content-Type": "application/json" },
   timeout: 30000,
 });
@@ -145,6 +147,81 @@ export const ragApi = {
   deleteDocument: (id) => api.delete(`/rag/document/${id}`),
   query: (question, nResults = 5) => api.post("/rag/query", { question, n_results: nResults }),
   stats: () => api.get("/rag/stats"),
+};
+
+// -- Analytics --
+export const analyticsApi = {
+  overview: (days = 7) => api.get("/analytics/overview", { params: { days } }),
+  tools: () => api.get("/analytics/tools"),
+  performance: () => api.get("/analytics/performance"),
+  history: (limit = 50, offset = 0) =>
+    api.get("/analytics/history", { params: { limit, offset } }),
+  traces: (limit = 20) => api.get("/analytics/traces", { params: { limit } }),
+  errors: (limit = 50) => api.get("/analytics/errors", { params: { limit } }),
+};
+
+// ── MCP (Model Context Protocol) ──
+export const mcpApi = {
+  status: () => api.get("/mcp/status"),
+  servers: () => api.get("/mcp/servers"),
+  tools: () => api.get("/mcp/tools"),
+  connect: (name) => api.post("/mcp/connect", { name }),
+  disconnect: (name) => api.post("/mcp/disconnect", { name }),
+  refresh: () => api.post("/mcp/refresh"),
+};
+
+// ── Vision & Multimodal AI ──
+export const visionApi = {
+  upload: (formData) => {
+    return api.post("/vision/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  analyze: (formData) => {
+    return api.post("/vision/analyze", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  ocr: (formData) => {
+    return api.post("/vision/ocr", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  question: (formData) => {
+    return api.post("/vision/question", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  caption: (formData) => {
+    return api.post("/vision/caption", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  chart: (formData) => {
+    return api.post("/vision/chart", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  uiAnalysis: (formData) => {
+    return api.post("/vision/ui-analysis", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 120000,
+    });
+  },
+  history: () => api.get("/vision/history"),
+  deleteImage: (id) => api.delete(`/vision/image/${id}`),
+  search: (formData) => {
+    return api.post("/vision/search", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+      timeout: 30000,
+    });
+  },
 };
 
 export default api;

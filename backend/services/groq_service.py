@@ -1,17 +1,22 @@
+import json
 import logging
 from typing import Optional
 from langchain_groq import ChatGroq
-from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
 from backend.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
+MAX_TOOL_ROUNDS = 5
+
 
 class GroqService:
-    """Service for interacting with Groq LLM via LangChain."""
+    """Service for interacting with Groq LLM via LangChain, with optional tool calling."""
 
     def __init__(self):
         self._llm = None
+        self._llm_with_tools = None
+        self._tools = None
 
     def _get_llm(self) -> ChatGroq:
         """Lazy-initialize the Groq LLM client."""
@@ -26,6 +31,15 @@ class GroqService:
             )
             logger.info("Groq LLM initialized with model: %s", settings.GROQ_MODEL)
         return self._llm
+
+    def _get_llm_with_tools(self, tools: list):
+        """Get LLM bound with tools (cached per tool set)."""
+        if self._llm_with_tools is None or self._tools != tools:
+            llm = self._get_llm()
+            self._llm_with_tools = llm.bind_tools(tools)
+            self._tools = tools
+            logger.info("LLM bound with %d tools", len(tools))
+        return self._llm_with_tools
 
     def _build_messages(
         self,
@@ -49,9 +63,16 @@ class GroqService:
         message: str,
         history: Optional[list[dict]] = None,
         system_prompt: Optional[str] = None,
-    ) -> str:
-        """Send a message to Groq with optional history and return the response."""
+    ) -> tuple[str, list[dict]]:
+        """Send a message to Groq with optional history and return the response.
+
+        Returns:
+            Tuple of (response_text, tool_calls_info) where tool_calls_info is a
+            list of dicts with keys: tool_name, arguments, result_summary.
+        """
         try:
+            from backend.tools.tool_manager import tool_manager
+
             llm = self._get_llm()
             prompt = system_prompt or (
                 "You are a helpful, friendly, and knowledgeable AI assistant. "
@@ -60,11 +81,76 @@ class GroqService:
             messages = self._build_messages(
                 system_prompt=prompt, history=history, user_message=message
             )
-            response = await llm.ainvoke(messages)
-            return response.content
+
+            tools = tool_manager.get_langchain_tools()
+            llm_with_tools = self._get_llm_with_tools(tools)
+            tools_used: list[dict] = []
+
+            response = await llm_with_tools.ainvoke(messages)
+
+            if not response.tool_calls:
+                return response.content or "", tools_used
+
+            logger.info("LLM requested %d tool calls", len(response.tool_calls))
+
+            for round_num in range(MAX_TOOL_ROUNDS):
+                messages.append(response)
+
+                for tc in response.tool_calls:
+                    tool_name = tc["name"]
+                    tool_args = tc["args"]
+                    logger.info("Tool call [%d]: %s(%s)", round_num, tool_name, tool_args)
+
+                    result = await tool_manager.execute_tool(tool_name, tool_args)
+                    messages.append(
+                        ToolMessage(content=result, tool_call_id=tc["id"])
+                    )
+
+                    result_summary = str(result)[:200] if result else ""
+                    tools_used.append({
+                        "tool_name": tool_name,
+                        "arguments": tool_args,
+                        "result_summary": result_summary,
+                    })
+
+                response = await llm_with_tools.ainvoke(messages)
+
+                if not response.tool_calls:
+                    break
+
+                logger.info("LLM requested more tool calls (round %d)", round_num + 1)
+
+            final = response.content or ""
+            if not final and tools_used:
+                final = "I've processed your request using available tools."
+
+            return final, tools_used
+
+        except ImportError:
+            logger.warning("Tools module not available, falling back to plain chat")
+            result = await self._plain_chat(message, history, system_prompt)
+            return result, []
         except Exception as e:
             logger.error("Groq API error: %s", str(e))
             raise
+
+    async def _plain_chat(
+        self,
+        message: str,
+        history: Optional[list[dict]] = None,
+        system_prompt: Optional[str] = None,
+    ) -> str:
+        """Plain chat without tool calling (fallback)."""
+        llm = self._get_llm()
+        prompt = system_prompt or (
+            "You are a helpful, friendly, and knowledgeable AI assistant. "
+            "Provide clear, concise, and accurate responses."
+        )
+        messages = self._build_messages(
+            system_prompt=prompt, history=history, user_message=message
+        )
+        response = await llm.ainvoke(messages)
+        return response.content
 
 
 groq_service = GroqService()

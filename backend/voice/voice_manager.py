@@ -91,8 +91,8 @@ class VoiceManager:
         # Build system prompt with memories
         system_prompt = await memory_manager.build_system_prompt(context)
 
-        # Get AI response
-        ai_response = await groq_service.chat(
+        # Get AI response (may invoke tools)
+        ai_response, tools_used = await groq_service.chat(
             user_text,
             history=context.get("recent_messages", history) or history,
             system_prompt=system_prompt,

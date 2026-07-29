@@ -27,12 +27,19 @@ def validate_password_strength(password: str) -> str | None:
     """Return an error message if the password is too weak, else None."""
     if len(password) < 8:
         return "Password must be at least 8 characters long."
+    if len(password) > 128:
+        return "Password must be at most 128 characters long."
     if not re.search(r"[A-Z]", password):
         return "Password must contain at least one uppercase letter."
     if not re.search(r"[a-z]", password):
         return "Password must contain at least one lowercase letter."
     if not re.search(r"\d", password):
         return "Password must contain at least one digit."
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        return "Password must contain at least one special character."
+    common = {"password", "12345678", "qwerty123", "letmein", "admin123", "welcome1"}
+    if password.lower() in common:
+        return "Password is too common. Please choose a stronger password."
     return None
 
 

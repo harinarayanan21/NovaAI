@@ -222,7 +222,7 @@ class RAGManager:
                 + "\n\n---\n\n".join(context_parts)
             )
 
-            answer = await groq_service.chat(
+            answer, _tools = await groq_service.chat(
                 question,
                 history=None,
                 system_prompt=system_prompt,
