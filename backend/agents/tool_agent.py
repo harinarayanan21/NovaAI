@@ -18,19 +18,14 @@ async def tool_agent_node(state: AgentState) -> dict:
         user_message = state["user_message"]
         system_prompt = state.get("system_prompt", "")
 
-        tool_descriptions = tool_manager.get_tool_descriptions()
-        tool_system_prompt = (
-            f"{system_prompt}\n\n"
-            f"You have access to the following tools:\n{tool_descriptions}\n\n"
-            "When you need to use a tool, invoke it. After receiving the tool result, "
-            "use it to answer the user's question. Do not repeat tool calls unnecessarily."
-        )
-
+        # Tools are bound natively via bind_tools. Never inject textual tool
+        # descriptions into the prompt — doing so makes llama models emit
+        # malformed <function=...> text instead of native tool_calls.
         tools = tool_manager.get_langchain_tools()
         llm_with_tools = groq_service._get_llm_with_tools(tools)
 
         from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
-        messages = [SystemMessage(content=tool_system_prompt)]
+        messages = [SystemMessage(content=system_prompt)]
 
         history = state.get("conversation_history", [])
         for msg in history[-6:]:
@@ -42,18 +37,21 @@ async def tool_agent_node(state: AgentState) -> dict:
 
         messages.append(HumanMessage(content=user_message))
 
-        response = await llm_with_tools.ainvoke(messages)
+        response = await groq_service._invoke_llm(llm_with_tools, messages)
         tool_results = []
 
         if response.tool_calls:
+            logger.info("tool_calls: %s", [tc["name"] for tc in response.tool_calls])
+            messages.append(response)
             for tc in response.tool_calls:
                 tool_name = tc["name"]
                 tool_args = tc["args"]
-                logger.info("Tool agent executing: %s(%s)", tool_name, tool_args)
+                logger.info("executed_tool: %s(%s)", tool_name, tool_args)
 
                 result = await tool_manager.execute_tool(tool_name, tool_args)
-                messages.append(response)
                 messages.append(ToolMessage(content=result, tool_call_id=tc["id"]))
+
+                logger.info("tool_result (%s): %s", tool_name, str(result)[:200])
 
                 tool_results.append({
                     "tool_name": tool_name,
@@ -61,10 +59,10 @@ async def tool_agent_node(state: AgentState) -> dict:
                     "result": str(result)[:500],
                 })
 
-            response = await llm_with_tools.ainvoke(messages)
+            response = await groq_service._invoke_llm(llm_with_tools, messages)
 
         return {
-            "tool_results": state.get("tool_results", []) + tool_results,
+            "tool_results": tool_results,
             "metadata": {
                 **state.get("metadata", {}),
                 "tool_agent_tools_executed": [tr["tool_name"] for tr in tool_results],

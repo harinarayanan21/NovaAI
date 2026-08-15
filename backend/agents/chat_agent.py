@@ -45,13 +45,26 @@ async def chat_agent_node(state: AgentState) -> dict:
 
         history = state.get("conversation_history", [])
 
-        response, tools_used = await groq_service.chat(
-            state["user_message"],
-            history=history,
-            system_prompt=system_prompt,
-        )
+        # When specialists (e.g. tool_agent) already executed tools, the
+        # results are in context. Use plain chat to synthesize the answer so
+        # the model does not re-invoke tools and emit raw <tool(...)> text.
+        if state.get("tool_results"):
+            response = await groq_service._plain_chat(
+                state["user_message"],
+                history=history,
+                system_prompt=system_prompt,
+            )
+            tools_used = []
+        else:
+            response, tools_used = await groq_service.chat(
+                state["user_message"],
+                history=history,
+                system_prompt=system_prompt,
+            )
 
         final_response = response if response else "I'm sorry, I couldn't generate a response."
+
+        logger.info("final_response: %s", final_response[:200])
 
         return {
             "final_response": final_response,

@@ -1,7 +1,24 @@
 import logging
-from typing import TypedDict, Optional
+import operator
+from typing import TypedDict, Optional, Annotated
 
 logger = logging.getLogger(__name__)
+
+
+def _merge_dicts(current: dict, incoming: dict) -> dict:
+    """Merge dicts from concurrent nodes so no keys are overwritten."""
+    merged = dict(current or {})
+    merged.update(incoming or {})
+    return merged
+
+
+def _merge_unique(current: list, incoming: list) -> list:
+    """Append lists while de-duplicating (used for errors)."""
+    result = list(current or [])
+    for item in incoming or []:
+        if item not in result:
+            result.append(item)
+    return result
 
 
 class AgentState(TypedDict):
@@ -9,6 +26,10 @@ class AgentState(TypedDict):
 
     Every agent reads from and writes to this state. The graph ensures
     consistency across all nodes.
+
+    Keys written by multiple concurrent nodes use Annotated reducers so
+    LangGraph merges their updates instead of raising
+    INVALID_CONCURRENT_GRAPH_UPDATE.
     """
 
     user_message: str
@@ -17,13 +38,13 @@ class AgentState(TypedDict):
     conversation_history: list[dict]
     retrieved_memories: list[dict]
     retrieved_documents: list[dict]
-    tool_results: list[dict]
+    tool_results: Annotated[list[dict], operator.add]
     planning_steps: list[str]
     final_response: str
-    metadata: dict
+    metadata: Annotated[dict, _merge_dicts]
     system_prompt: str
     routed_agents: list[str]
-    errors: list[str]
+    errors: Annotated[list[str], _merge_unique]
     voice_data: Optional[dict]
     mcp_data: dict
     vision_data: dict

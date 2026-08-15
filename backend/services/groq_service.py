@@ -1,5 +1,6 @@
 import json
 import logging
+import re
 from typing import Optional
 from langchain_groq import ChatGroq
 from langchain_core.messages import HumanMessage, SystemMessage, AIMessage, ToolMessage
@@ -8,6 +9,11 @@ from backend.config.settings import settings
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
+
+# Matches raw text tool invocations like "<web_search({...})" or
+# "<function=web_search{...}" that llama models occasionally emit in
+# response.content instead of a structured tool_call.
+RAW_TOOL_CALL_RE = re.compile(r"<\s*[a-zA-Z_][a-zA-Z0-9_]*\s*(?:\(|\{|=)")
 
 
 class GroqService:
@@ -40,6 +46,30 @@ class GroqService:
             self._tools = tools
             logger.info("LLM bound with %d tools", len(tools))
         return self._llm_with_tools
+
+    async def _invoke_llm(self, llm, messages: list, attempts: int = 3):
+        """Invoke an LLM, retrying when Groq rejects a malformed tool call.
+
+        llama-3.3-70b-versatile intermittently emits malformed <function=...>
+        text instead of a valid structured tool call. Groq rejects it with a
+        400 'tool_use_failed' error carrying the raw invocation text. Retrying
+        the same request lets the model produce a valid call on the next try.
+        """
+        last_err = None
+        for attempt in range(attempts):
+            try:
+                return await llm.ainvoke(messages)
+            except Exception as e:
+                last_err = e
+                err = str(e)
+                if "tool_use_failed" not in err and "failed_generation" not in err:
+                    raise
+                logger.warning(
+                    "Groq rejected malformed tool call (attempt %d/%d)",
+                    attempt + 1,
+                    attempts,
+                )
+        raise last_err
 
     def _build_messages(
         self,
@@ -86,10 +116,17 @@ class GroqService:
             llm_with_tools = self._get_llm_with_tools(tools)
             tools_used: list[dict] = []
 
-            response = await llm_with_tools.ainvoke(messages)
+            response = await self._invoke_llm(llm_with_tools, messages)
 
             if not response.tool_calls:
-                return response.content or "", tools_used
+                content = response.content or ""
+                if RAW_TOOL_CALL_RE.search(content):
+                    logger.warning(
+                        "LLM returned raw tool invocation text in content; "
+                        "falling back to plain chat"
+                    )
+                    return await self._plain_chat(message, history, system_prompt), []
+                return content, tools_used
 
             logger.info("LLM requested %d tool calls", len(response.tool_calls))
 
@@ -113,7 +150,7 @@ class GroqService:
                         "result_summary": result_summary,
                     })
 
-                response = await llm_with_tools.ainvoke(messages)
+                response = await self._invoke_llm(llm_with_tools, messages)
 
                 if not response.tool_calls:
                     break
@@ -121,6 +158,12 @@ class GroqService:
                 logger.info("LLM requested more tool calls (round %d)", round_num + 1)
 
             final = response.content or ""
+            if RAW_TOOL_CALL_RE.search(final):
+                logger.warning(
+                    "Final response was raw tool invocation text; "
+                    "falling back to plain chat"
+                )
+                return await self._plain_chat(message, history, system_prompt), tools_used
             if not final and tools_used:
                 final = "I've processed your request using available tools."
 

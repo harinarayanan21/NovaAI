@@ -14,7 +14,6 @@ async def mcp_agent_node(state: AgentState) -> dict:
     try:
         user_message = state.get("user_message", "")
         mcp_data = state.get("mcp_data", {})
-        tool_results = state.get("tool_results", [])
 
         tools = registry.get_all_tools_flat()
         if not tools:
@@ -100,7 +99,7 @@ async def mcp_agent_node(state: AgentState) -> dict:
                     },
                     "tools_available": len(tools),
                 },
-                "tool_results": tool_results + [{
+                "tool_results": [{
                     "tool_name": f"mcp:{server_name}/{tool_name}",
                     "arguments": arguments,
                     "result": result.get("content", str(result))[:500],

@@ -18,9 +18,11 @@ def _route_after_supervisor(state: AgentState) -> list[str]:
         "voice_agent": "voice_agent",
         "mcp_agent": "mcp_agent",
         "vision_agent": "vision_agent",
-        "chat_agent": "chat_agent",
     }
 
+    # Only specialists are fanned out here. chat_agent runs in a LATER
+    # superstep via each specialist -> chat_agent edge, so it reads the
+    # merged results instead of overwriting shared keys concurrently.
     next_nodes = []
     for agent in routed:
         if agent in node_map and agent not in next_nodes:
@@ -29,10 +31,7 @@ def _route_after_supervisor(state: AgentState) -> list[str]:
     if not next_nodes:
         next_nodes = ["chat_agent"]
 
-    if "chat_agent" not in next_nodes:
-        next_nodes.append("chat_agent")
-
-    logger.info("Routing to nodes: %s", next_nodes)
+    logger.info("routed_agents=%s -> next_nodes=%s", routed, next_nodes)
     return next_nodes
 
 
